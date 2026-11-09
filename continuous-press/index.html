@@ -158,11 +158,13 @@ a{touch-action:manipulation}
 .chips{display:flex;flex-wrap:wrap;gap:6px}
 .back{border:0;background:none;color:var(--gold);font:600 12.5px/1 Poppins,system-ui,sans-serif;cursor:pointer;padding:6px 0;margin:-6px 0 8px}
 .cta{display:flex;gap:8px;margin-top:22px;flex-wrap:wrap}
+.cta a{max-width:100%;text-align:center;line-height:1.3}
 .cta a,.pbtn{
   font:600 13px/1 Poppins,system-ui,sans-serif;text-decoration:none;border-radius:999px;padding:11px 16px;
   border:1px solid var(--hair-strong);color:var(--text);background:transparent;cursor:pointer;
 }
 .cta a.primary,.pbtn.primary{background:var(--gold-ui);border-color:var(--gold-ui);color:#1d1d1d}
+.cta a{line-height:1.3}
 .pbtn.blue{background:var(--chip);border-color:var(--chip);color:#fff}
 .pbtn:disabled{opacity:.4;cursor:default}
 .pbtn[aria-pressed="true"]{background:var(--btn-hover)}
@@ -425,6 +427,7 @@ const BEND_L = 0.26, BEND_Z = ROD_L/2 + BEND_L/2 - 0.03;   // bending rods: bar 
 const CAR_YLOW = GAP + 0.006 + ROD_R, CAR_R = 0.2, CAR_CY0 = CAR_YLOW + CAR_R;
 const CAR_YR = 1.35, CAR_CYT = CAR_YR - CAR_R;             // high return run of the roller bars
 const CAR_D = 0.7;                                           // the bars climb and drop on an angle at each end
+const CAR_DB = 0.4;                                          // lower loop, entrance end: angles down and back towards the entrance drum instead
 const GROUND = -2.6;
 const DOSE = 0.0536;           // 50 mm in model units
 const SPEED = 0.55;            // units per second
@@ -645,18 +648,18 @@ const drums = [];
 
 /* ---------- rod carpets (roller bars, bending rods, roller chain) ---------- */
 // loop: working run along the platen, round the sprocket, up to a high return run, back to the entrance, down again
-function loopPath(X, R, cy0, cyT, yR, yL, D){
-  const h = cyT - cy0, L = Math.hypot(D, h), an = Math.atan2(D, h);
-  const segs = [
-    {l:[-X, yL], d:[1, 0], len:2*X},
-    {c:[X, cy0], a0:-Math.PI/2, len:(Math.PI/2 + an)*R},
-    {l:[X + R*h/L, cy0 + R*D/L], d:[-D/L, h/L], len:L},
-    {c:[X - D, cyT], a0:an, len:(Math.PI/2 - an)*R},
-    {l:[X - D, yR], d:[-1, 0], len:2*(X - D)},
-    {c:[-(X - D), cyT], a0:Math.PI/2, len:(Math.PI/2 - an)*R},
-    {l:[-(X - D) - R*h/L, cyT + R*D/L], d:[-D/L, -h/L], len:L},
-    {c:[-X, cy0], a0:Math.PI - an, len:(Math.PI/2 + an)*R},
-  ];
+// D: how far the exit end leans in. DIN: the same at the entrance end; a negative DIN leans the return run out past the inlet sprocket
+function loopPath(X, R, cy0, cyT, yR, yL, D, DIN = D){
+  const C = [[-X, cy0], [X, cy0], [X - D, cyT], [-X + DIN, cyT]];   // corner sprockets, anticlockwise
+  const dirs = C.map((a, i) => { const b = C[(i + 1) % 4], dx = b[0] - a[0], dy = b[1] - a[1], l = Math.hypot(dx, dy); return [dx/l, dy/l, l]; });
+  const segs = [];
+  C.forEach((a, i) => {
+    const [dx, dy, l] = dirs[i], n = [dy, -dx];                 // straight run, offset outwards by the sprocket radius
+    segs.push({l:[a[0] + n[0]*R, a[1] + n[1]*R], d:[dx, dy], len:l});
+    const [ex, ey] = dirs[(i + 1) % 4], a0 = Math.atan2(n[1], n[0]);
+    let da = Math.atan2(-ex, ey) - a0; while (da < 0) da += 2*Math.PI;
+    segs.push({c:C[(i + 1) % 4], a0, len:da*R});                // round the next sprocket
+  });
   const P = segs.reduce((a, g) => a + g.len, 0);
   return { P, at(s, out, tan, flip){
     s = ((s % P) + P) % P;
@@ -677,8 +680,10 @@ const carpets = [];
   const rolG = new THREE.CylinderGeometry(0.034, 0.034, 0.075, 14);
   const bendG = new THREE.CylinderGeometry(0.017, 0.017, BEND_L, 8);
   const plateG = new THREE.BoxGeometry(1, 0.074, 0.013);
-  const path = loopPath(CAR_HL, CAR_R, CAR_CY0, CAR_CYT, CAR_YR, CAR_YLOW, CAR_D);
+  const pathTop = loopPath(CAR_HL, CAR_R, CAR_CY0, CAR_CYT, CAR_YR, CAR_YLOW, CAR_D);
+  const pathBot = loopPath(CAR_HL, CAR_R, CAR_CY0, CAR_CYT, CAR_YR, CAR_YLOW, CAR_D, -CAR_DB);
   [false, true].forEach(flip => {
+    const path = flip ? pathBot : pathTop;
     const n = Math.round(path.P/ROD_SP), sp = path.P/n;
     const rods = new THREE.InstancedMesh(rodG, M.rod, n);
     const rol = new THREE.InstancedMesh(rolG, M.chain, n*2);
@@ -724,7 +729,7 @@ const sprockets = [];
   const hole = new THREE.Path(); hole.absarc(0, 0, 0.05, 0, Math.PI*2, true); s.holes.push(hole);
   const sg = new THREE.ExtrudeGeometry(s, {depth:0.04, bevelEnabled:false, curveSegments:12}); sg.translate(0, 0, -0.02);
   const shG = new THREE.CylinderGeometry(0.05, 0.05, CHAIN_Z*2 + 0.2, 16); shG.rotateX(Math.PI/2);
-  [1, -1].forEach(dir => [-1, 1].forEach(sx => [[CAR_HL, CAR_CY0], [CAR_HL - CAR_D, CAR_CYT]].forEach(([ax, y]) => { const x = sx*ax;
+  [1, -1].forEach(dir => [-1, 1].forEach(sx => [[CAR_HL, CAR_CY0, false], [CAR_HL - CAR_D, CAR_CYT, true]].forEach(([ax, y, ret]) => { const x = ret && dir < 0 && sx < 0 ? -(CAR_HL + CAR_DB) : sx*ax;
     const grp = new THREE.Group(); grp.position.set(x, dir*y, 0);
     [-1, 1].forEach(sz => { const w = mesh(sg, M.sprk); w.position.z = sz*CHAIN_Z; grp.add(w); });
     grp.add(mesh(shG, M.sprk));
@@ -768,8 +773,8 @@ const rollers = [], rollerGroups = [];
 
 /* ---------- 1: entrance drip bars, dripping onto the roller bars in sections ---------- */
 const drops = [];   // {x, z, y0, y1, period, phase, fall}
-const BAR_Y = [1.023, -0.62];
-const BAR_BX = -16.416;   // bottom bar: outer side of the lower angled run, nozzles 32 deg down towards the rods
+const BAR_Y = [1.023, -0.462];
+const BAR_BX = -16.997;   // bottom bar: outer (entrance) side of the lower angled run, nozzles 32 deg down towards the rods
 {
   const barG = new THREE.CylinderGeometry(0.035, 0.035, BELT_W + 0.15, 20); barG.rotateX(Math.PI/2);
   const tipG = new THREE.ConeGeometry(0.012, 0.035, 10); tipG.rotateX(Math.PI);
@@ -894,7 +899,7 @@ function lubeStation(x, z, product, pipeTo, f = 1){
 lubeStation(-19.9, 3.15, 'METACHAIN\u2122 CB-100', [[-19.45, GROUND + 1.05, 3.15], [-19.1, GROUND + 1.3, 2.75], [-18.84, GROUND + 1.4, 2.25], [-18.75, GROUND + 1.4, 1.98], [-18.45, GROUND + 1.4, 1.92]]);
 {
   const route = (pts) => scene.add(mesh(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts.map(p => new V3(...p))), 160, 0.022, 8), M.sprk, false, false));
-  route([[-18.45, GROUND + 1.4, 1.92], [-18.3, GROUND + 0.6, 1.9], [-18.2, GROUND + 0.08, 1.4], [-18.2, GROUND + 0.08, -1.4], [-18.3, GROUND + 0.6, -1.9], [-18.25, -1.4, -1.92], [-17.6, -1.15, -1.92], [-16.9, -0.75, -1.88], [-16.55, -0.63, -1.75], [BAR_BX, BAR_Y[1], -1.6]]);
+  route([[-18.45, GROUND + 1.4, 1.92], [-18.3, GROUND + 0.6, 1.9], [-18.2, GROUND + 0.08, 1.4], [-18.2, GROUND + 0.08, -1.4], [-18.3, GROUND + 0.6, -1.9], [-18.25, -1.4, -1.92], [-17.6, -1.15, -1.92], [-17.25, -0.85, -1.9], [-17.1, -0.55, -1.76], [BAR_BX, BAR_Y[1], -1.6]]);
   route([[-17.6, -1.15, -1.92], [-17.2, 0.2, -1.95], [-16.7, 0.9, -1.85], [-16.3, BAR_Y[0], -1.72], [BAR_X, BAR_Y[0], -1.6]]);
   const tee = mesh(new THREE.SphereGeometry(0.034, 12, 10), M.sprk, false); tee.position.set(-17.6, -1.15, -1.92); scene.add(tee);
   [[BAR_X, BAR_Y[0]], [BAR_BX, BAR_Y[1]]].forEach(([bx, by]) => { const c = mesh(new THREE.CylinderGeometry(0.038, 0.038, 0.06, 12), M.sprk, false); c.rotation.x = Math.PI/2; c.position.set(bx, by, -1.6); scene.add(c); });
@@ -1192,7 +1197,8 @@ function stepHTML(i){
     <div class="dots" aria-hidden="true">${STEPS.map((_, k) => `<i class="${k === i ? 'on' : k < i ? 'done' : ''}"></i>`).join('')}</div>
     <h2>${esc(s.title)}</h2>
     <p class="lede">${esc(s.body)}</p>
-    ${s.prods ? `<div class="wprods">${s.prods}</div>` : ''}`;
+    ${s.prods ? `<div class="wprods">${s.prods}</div>` : ''}
+    ${s.cta ? `<div class="cta"><a class="primary" href="${CONTACT_URL}" target="_blank" rel="noopener">${esc(s.cta)}</a></div>` : ''}`;
 }
 function wirePanel(){
   panelBody.querySelectorAll('[data-act="home"]').forEach(b => b.addEventListener('click', () => overview()));
@@ -1261,6 +1267,7 @@ const STEPS = [
     cam:[-33, 14, 38], tgt:[2.5, -0.6, 0], ghost:false,
     labels:[['Upper steel belt', 4, 1.84, 1.5], ['Lower steel belt', -6, -1.84, 1.5], ['Pressing frames', -12.6, 2.6, 2.9], ['Hydraulic cylinders', -1.4, 3.1, 1.3], ['Drive drums', 18, 1.83, 1.6], ['Mat in', -31, 0.36, 0], ['Panel out', 26, 0.02, 0], ['Lubricant tank and drums', -20.6, -1.1, 3.15], ['Release agent', SPRAY_X, 1.5, 0]] },
   { title:'Release agent before the press', body:'Just before the press, a spray bar across the forming line mists release agent onto the top of the mat through a row of fan nozzles. The thin, even film helps stop the resin sticking to the steel belt, so the finished panel parts cleanly from the belt at the exit.',
+    cta:'Contact Us to find out more about our release agents',
     cam:[-31.4, 3.1, 4.9], tgt:[-24.1, 0.3, 0], ghost:false, hl:'spray',
     labels:[['Release agent', SPRAY_X, 1.5, -0.7], ['Fan nozzles across the width', SPRAY_X + 0.12, SPRAY_TIP_Y + 0.06, 0.6], ['Mat heading into the press', -23.8, 0.36, -0.5], ['Feed line', SPRAY_X + 0.1, 0.2, 2.08]] },
   { title:'The loose mat goes in', body:'The loose, resin-coated mat enters between the steel belts. As the gap closes it is squeezed into a panel, and the belts carry the full pressing load through the roller bars, so the oil film on them is what keeps the press turning smoothly.',
