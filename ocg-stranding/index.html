@@ -354,9 +354,9 @@ const P = {
   'ocg-1000':     {code:'1000',     grp:'std',  desc:'Protective grease for aluminium and ACSR overhead line conductors.', url:'https://metalube.co.uk/product/ocg-1000/'},
   'ocg-4500':     {code:'4500',     grp:'std',  desc:'Protective grease for aluminium, ACSR and OPGW overhead line conductors.', url:'https://metalube.co.uk/product/ocg-4500/'},
   'ocg-5000':     {code:'5000',     grp:'std',  desc:'High-performance grease for aluminium, ACSR and OPGW overhead line conductors.', url:'https://metalube.co.uk/product/ocg-5000/'},
-  'ocg-6000':     {code:'6000',     grp:'htls', desc:'High-temperature, fully synthetic grease for HTLS conductors.', url:'https://metalube.co.uk/product/ocg-6000/'},
-  'ocg-htls-210': {code:'HTLS 210', grp:'htls', desc:'Protective grease for HTLS overhead line conductors.', url:'https://metalube.co.uk/product/ocg-htls-210/'},
-  'ocg-htls-250': {code:'HTLS 250', grp:'htls', desc:'Protective grease for HTLS overhead line conductors.', url:'https://metalube.co.uk/product/ocg-htls-250/'}
+  'ocg-6000':     {code:'6000',     grp:'htls', black:true, desc:'High-temperature, fully synthetic grease for HTLS conductors.', url:'https://metalube.co.uk/product/ocg-6000/'},
+  'ocg-htls-210': {code:'HTLS 210', grp:'htls', black:true, desc:'Protective grease for HTLS overhead line conductors.', url:'https://metalube.co.uk/product/ocg-htls-210/'},
+  'ocg-htls-250': {code:'HTLS 250', grp:'htls', black:true, desc:'Protective grease for HTLS overhead line conductors.', url:'https://metalube.co.uk/product/ocg-htls-250/'}
 };
 const GROUPS = [
   {id:'std',  name:'Aluminium, ACSR and OPGW conductors'},
@@ -890,6 +890,9 @@ const XS = (()=>{
   [12,18,24].forEach(n=>{ const R = inner/(1-Math.PI/n); const w = Math.PI*R/n; L.push({n, R, w}); inner = R + w; });
   return {c, rc, L};
 })();
+// OCG™ 6000, HTLS 210 and HTLS 250 are black greases; the rest are brown
+const isBlack = () => !!(currentProd && P[currentProd].black);
+const greaseHex = () => isBlack() ? '#161616' : '#6b4224';
 function xsecSVG(st){
   const cx = 38, cy = 38, out = [];
   const ring = (r, col, sw, dash) => `<circle cx="${cx}" cy="${cy}" r="${r.toFixed(2)}" fill="none" stroke="${col}" stroke-width="${sw}" ${dash?'stroke-dasharray="2.5 2.5"':''}/>`;
@@ -898,7 +901,7 @@ function xsecSVG(st){
   // grease, outermost first
   // grease surface 0 = over the core, 1 = over the first layer, ...
   const gR = j => (j===0 ? XS.rc : XS.L[j-1].R + XS.L[j-1].w);
-  for (let j=st.G-1;j>=0;j--){ out.push(`<circle cx="${cx}" cy="${cy}" r="${(gR(j)+1.5).toFixed(2)}" fill="#6b4224"/>`); }
+  for (let j=st.G-1;j>=0;j--){ out.push(`<circle cx="${cx}" cy="${cy}" r="${(gR(j)+1.5).toFixed(2)}" fill="${greaseHex()}"/>`); }
   // core
   out.push(`<circle cx="${cx}" cy="${cy}" r="${XS.c}" fill="#8f979f" stroke="#5e656b" stroke-width=".6"/>`);
   for (let i=0;i<6;i++){ const a = i*Math.PI/3; out.push(`<circle cx="${(cx+Math.cos(a)*2*XS.c).toFixed(2)}" cy="${(cy+Math.sin(a)*2*XS.c).toFixed(2)}" r="${XS.c}" fill="#8f979f" stroke="#5e656b" stroke-width=".6"/>`); }
@@ -997,6 +1000,9 @@ function wirePanel(){
 }
 
 function renderTags(){
+  MAT.grease.color.setHex(isBlack() ? 0x050505 : 0x2a170b);
+  MAT.grease.clearcoat = isBlack() ? .3 : .45;
+  MAT.grease.envMapIntensity = isBlack() ? .35 : 1;
   GREASE.forEach(s=>{
     s.tagEl.innerHTML = currentProd
       ? chipHTML(currentProd, 'hl')
