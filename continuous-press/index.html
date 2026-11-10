@@ -146,11 +146,12 @@ a{touch-action:manipulation}
 .facts dd{margin:0;color:var(--text);font-weight:600}
 .plist{list-style:none;margin:0;padding:0;display:grid;gap:10px}
 .prod{
-  border:1px solid var(--hair);border-radius:16px;padding:10px 12px 10px 14px;
-  display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;
+  border:1px solid var(--hair);border-radius:16px;padding:9px 11px;
+  display:flex;align-items:center;justify-content:space-between;gap:6px;flex-wrap:wrap;
 }
+.prod .chip{padding:5px 8px}
 .prod.hl{border-color:var(--gold-ui)}
-.prod a{font:600 12.5px/1 Poppins,system-ui,sans-serif;color:var(--gold);text-decoration:none;padding:8px 0}
+.prod a{font:600 12px/1 Poppins,system-ui,sans-serif;color:var(--gold);text-decoration:none;padding:8px 0;white-space:nowrap}
 .prod a:hover{text-decoration:underline}
 .range-grp{margin-top:6px}
 .range-grp+.range-grp{margin-top:14px}
@@ -268,6 +269,7 @@ a{touch-action:manipulation}
 
 /* ---------- responsive ---------- */
 @media (max-width: 1440px){ .legend{display:none} }
+.legend{flex-direction:column;align-items:flex-start;gap:6px}   /* stacked so it stays clear of the dock */
 @media (max-width: 1180px){
   .steps{width:214px}
   .panel{width:320px}
@@ -1068,7 +1070,8 @@ const POINTS = {
   '4': { name:'Hydraulic cylinders', prod:'METALIFE™ CB-197', links:['CB-197'],
          how:'A semi-fluid grease that coats the hydraulic cylinders, preventing the abrasive solids that can destroy the cylinder seals.',
          facts:[['Where','Hydraulic cylinder surfaces'],['Protects','Cylinder seals']],
-         anchor:new V3(-1.4, 3.2, 1.3), cam:[3.2, 5.6, 8.8], tgt:[-1.4, 2.6, 0.9], ghost:false },
+         anchor:new V3(-1.4, 3.2, 1.3), cam:[3.2, 5.6, 8.8], tgt:[-1.4, 2.6, 0.9], ghost:false,
+         scene:'Heat and pressure' },   // opens on the same scene as this walkthrough step
 };
 
 const OVERVIEW = {cam:[-37, 13.5, 35], tgt:[-1.5, -0.6, 0]};
@@ -1254,17 +1257,22 @@ setMotion(playing);
 function select(id, code = null, fly = true){
   const p = POINTS[id]; if (!p) return;
   if (tour.on) endTour(false);
+  resetScene();
   selected = id; selectedCode = code;
   hl = GROUPS[id] || []; clearHL();
   setPanel(pointHTML(id, code), true);
   setHighlights();
-  setGhost(p.ghost !== false);
-  if (fly) flyTo(p.cam, p.tgt);
+  const sc = pointScene(id);
+  setGhost(sc ? !!sc.ghost : p.ghost !== false);
+  if (sc){ heat = !!sc.heat; forceArrows.visible = !!sc.force; setTop(!sc.hideTop); showLabels(sc.labels); }
+  const sh = pointShot(id);
+  if (fly) flyTo(sh.cam, sh.tgt);
   if (location.hash.slice(1) !== 'point-' + id) history.replaceState(null, '', '#point-' + id);
   if (code){ const el = panelBody.querySelector(`.prod[data-code="${code}"]`); if (el) requestAnimationFrame(() => el.scrollIntoView({block:'nearest'})); }
 }
 function overview(fly = true){
   if (tour.on) endTour(false);
+  resetScene();
   selected = null; selectedCode = null; hl = []; clearHL();
   setPanel(overviewHTML(), layoutMode() === 'wide');
   setHighlights();
@@ -1284,10 +1292,10 @@ const STEPS = [
     labels:[['Release agent', SPRAY_X, 1.5, -0.7], ['Fan nozzles across the width', SPRAY_X + 0.12, SPRAY_TIP_Y + 0.06, 0.6], ['Mat heading into the press', -23.8, 0.36, -0.5], ['Feed line', SPRAY_X + 0.1, 0.2, 2.08]] },
   { title:'The loose mat goes in', body:'The loose, resin-coated mat enters between the steel belts. As the gap closes it is squeezed into a panel, and the belts carry the full pressing load through the roller bars, so the oil film on them is what keeps the press turning smoothly.',
     cam:[-17.2, 1.5, 9.6], tgt:[-18.4, 0.1, 0], ghost:true,
-    labels:[['Loose mat', -20.6, 0.36, 1.45], ['Gap closes between the belts', -18.25, 0.1, 1.5], ['Compressed panel', -16.3, 0.0, 1.45]] },
-  { title:'Where the oil goes in', body:'Lubrication starts at the entrance. Drip bars above and below dose METACHAIN\u2122 belt oil across the roller bars in multiple sections, so they carry a thin film into the press. Both bars are supplied from lubricant tanks beside the press, filled from Metalube drums.',
+    labels:[['Loose mat enters the press', -20.6, 0.36, 1.45], ['Gap closes between the belts', -18.25, 0.1, 1.5], ['Compressed panel', -16.3, 0.0, 1.45]] },
+  { title:'Where the oil is applied', body:'Lubrication starts at the entrance. Drip bars above and below dose METACHAIN\u2122 belt oil across the roller bars in multiple sections, so they carry a thin film into the press. Both sets of bars are supplied from lubricant tanks beside the press, filled from Metalube drums.',
     prods:'<b>Steel belt and roller bars:</b> METACHAIN\u2122 CB-100, CB-633',
-    cam:[-13.4, 1.0, 6.4], tgt:[-16.2, 0.2, 0.3], ghost:true, hl:['1'],
+    cam:[-17.55, 1.25, 6.6], tgt:[-16.25, 0.15, 0.2], ghost:true, hl:['1'],
     labels:[['Top drip bar, multiple drop points', BAR_X, BAR_Y[0] + 0.05, 1.55], ['Roller bars', -16.15, 0.6, -0.4], ['Lower drip bar', BAR_BX, BAR_Y[1], 1.55]] },
   { title:'Oiling the chain and bending rods', body:'On the chain line, a nozzle feeds METACHAIN\u2122 chain oil into a rotating wire brush. The oil drips through the bristles onto the bending rods and the roller chain as they pass underneath, on both sides of the press.',
     prods:'<b>Chain and bending rods:</b> METACHAIN\u2122 CB-200, CB-310',
@@ -1297,7 +1305,7 @@ const STEPS = [
     prods:'<b>Hydraulic cylinders:</b> METALIFE\u2122 CB-197',
     cam:[-4.5, 3.4, 11.5], tgt:[-3, 0.1, 0], ghost:true, heat:true, force:true,
     labels:[['Heated platen', -0.5, 0.39, 1.5], ['Heated platen', -0.5, -0.39, 1.5], ['Hydraulic pressure', -6, 1.05, 0.8], ['Panel curing between the belts', -4.5, 0, 1.45]] },
-  { title:'Roller bars', body:'The roller bars roll between the moving belt and the fixed platen. A film of METACHAIN\u2122 belt oil on the rolling surfaces keeps that contact smooth, with less friction and wear than sliding.',
+  { title:'Roller bars', body:'The roller bars roll between the moving belt and the fixed platen. A film of METACHAIN\u2122 belt oil on the rolling surfaces keeps that contact smooth, with less friction and wear.',
     prods:'<b>Steel belt and roller bars:</b> METACHAIN\u2122 CB-100, CB-633',
     cam:[1.7, 0.55, 4.1], tgt:[0, 0.2, 1.1], ghost:true,
     labels:[['Roller bars', 0.3, CAR_YLOW, 1.45], ['Bending rods', -0.45, CAR_YLOW, 1.58], ['Chain', -1.2, CAR_YLOW, 1.66], ['Steel belt', 0.9, 0.024, 1.5], ['Heated platen', 0.0, 0.48, 1.5]] },
@@ -1317,6 +1325,20 @@ const STEPS = [
 const tour = { on:false, idx:0, auto:false, t0:0, labels:[] };
 function setTop(show){ beltTop.visible = show; rollerGroups.forEach(r => { if (r.sg > 0) r.g.visible = show; }); }
 function clearLabels(){ tour.labels.forEach(l => l.el.remove()); tour.labels = []; }
+function showLabels(list){
+  clearLabels();
+  list.forEach(([text, x, y, z], k) => {
+    const el = document.createElement('div'); el.className = 'lbl';
+    const sp = document.createElement('span'); sp.textContent = text; el.appendChild(sp);
+    labelLayer.appendChild(el);
+    tour.labels.push({el, at:new V3(x, y, z), w:0, h:0});
+    setTimeout(() => el.classList.add('show'), reduceMotion ? 0 : 700 + k*180);
+  });
+}
+// a point can borrow a walkthrough step's scene (camera, cutaway, effects and labels)
+function pointScene(id){ const t = POINTS[id] && POINTS[id].scene; return t ? STEPS.find(s => s.title === t) || null : null; }
+function pointShot(id){ return pointScene(id) || POINTS[id]; }
+function resetScene(){ heat = false; forceArrows.visible = false; setTop(true); clearLabels(); }
 function goStep(i){
   tour.idx = i; tour.t0 = performance.now();
   const s = STEPS[i];
@@ -1327,14 +1349,7 @@ function goStep(i){
   heat = !!s.heat; forceArrows.visible = !!s.force;
   hl = s.hl ? [].concat(s.hl).flatMap(k => GROUPS[k]) : []; clearHL();
   clearLabels();
-  s.labels.forEach(([text, x, y, z], k) => {
-    const el = document.createElement('div'); el.className = 'lbl';
-    const sp = document.createElement('span'); sp.textContent = text; el.appendChild(sp);
-    labelLayer.appendChild(el);
-    const l = {el, at:new V3(x, y, z), w:0, h:0};
-    tour.labels.push(l);
-    setTimeout(() => el.classList.add('show'), reduceMotion ? 0 : 700 + k*180);
-  });
+  showLabels(s.labels);
   markList();
   const shot = stepShot(i); flyTo(shot.cam, shot.tgt);
 }
@@ -1505,7 +1520,7 @@ window.addEventListener('resize', () => {
   clearTimeout(refit);
   refit = setTimeout(() => {
     if (tour.on){ const shot = stepShot(tour.idx); flyTo(shot.cam, shot.tgt, 700); }
-    else if (selected) flyTo(POINTS[selected].cam, POINTS[selected].tgt, 700);
+    else if (selected){ const sh = pointShot(selected); flyTo(sh.cam, sh.tgt, 700); }
     else flyOverview(700);
   }, 250);
 });
